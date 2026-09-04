@@ -6,7 +6,7 @@ const cors = require("cors");
 const { Server } = require("socket.io");
 
 const connectDB = require("./config/db");
-const userModel = require("./models/userModel"); // 👈 nuevo
+const userModel = require("./models/userModel");
 
 const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
@@ -16,24 +16,43 @@ const calculosRoutes = require("./routes/calculosRoutes");
 const app = express();
 const server = http.createServer(app);
 
-app.use(cors());
+// --- CORS: whitelist explícita + manejo de preflight ---
+const ORIGENES_PERMITIDOS = [
+  "https://frontapp-seven.vercel.app",
+  "http://localhost:3000", // para desarrollo local
+];
+
+const corsOptions = {
+  origin(origin, callback) {
+    // Permite requests sin origin (Postman, curl, server-to-server)
+    if (!origin || ORIGENES_PERMITIDOS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origen no permitido por CORS: ${origin}`));
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+app.use(cors(corsOptions));
+// Responde explícitamente a cualquier preflight OPTIONS
+app.options("*", cors(corsOptions));
+
 app.use(express.json());
 
 // Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    origin: ORIGENES_PERMITIDOS,
+    methods: ["GET", "POST"],
+  },
 });
 
 app.set("io", io);
 
 app.get("/", (req, res) => {
-  res.json({
-    ok: true,
-    message: "Servidor funcionando 🚀"
-  });
+  res.json({ ok: true, message: "Servidor funcionando 🚀" });
 });
 
 app.use("/api/auth", authRoutes);
@@ -45,10 +64,11 @@ app.use((req, res) => {
   res.status(404).json({ message: "Ruta no encontrada" });
 });
 
+// Manejador de errores — también necesita permitir CORS en la respuesta de error
 app.use((err, req, res, next) => {
   console.error("💥", err.message);
   res.status(err.status || 500).json({
-    message: err.message || "Error interno del servidor"
+    message: err.message || "Error interno del servidor",
   });
 });
 
@@ -70,7 +90,7 @@ const PORT = process.env.PORT || 5000;
 async function iniciar() {
   try {
     await connectDB();
-    await userModel.seedAdmin(); // 👈 nuevo: crea el admin ya con Mongo conectado
+    await userModel.seedAdmin();
 
     server.listen(PORT, () => {
       console.log(`🚀 Servidor trota en http://localhost:${PORT}`);
@@ -83,3 +103,5 @@ async function iniciar() {
 }
 
 iniciar();
+
+module.exports = app;
