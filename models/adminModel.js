@@ -1,8 +1,4 @@
 // models/adminModel.js
-// Guarda el catálogo editable por el admin: platos de menú y bebidas.
-// Mismos ids que usa el front en lib/menuData.ts y lib/drinksData.ts,
-// para que el día que el front pida el catálogo acá (GET /api/admin/catalogo)
-// en vez de tenerlo hardcodeado, no haya que tocar ids en ningún lado.
 let catalogo = {
   menu: [
     { id: "asado", label: "Asado", image: "/assets/menu/asado.jpg" },
