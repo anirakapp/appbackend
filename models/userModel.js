@@ -1,20 +1,26 @@
-// models/userModel.js
-// "DB" en memoria. El día que sumen una base de datos real (Mongo/Postgres),
-// esta es la única pieza que hay que reemplazar: la forma (findByEmail,
-// verifyPassword, create) puede quedar igual.
+const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const USERS = [];
+const userSchema = new mongoose.Schema(
+  {
+    nombre: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    passwordHash: { type: String, required: true },
+    role: { type: String, enum: ["user", "admin"], default: "user" },
+  },
+  { timestamps: true }
+);
 
-function seedAdmin() {
-  const email = process.env.ADMIN_EMAIL || "admin@cuantocompro.com";
+const User = mongoose.model("User", userSchema);
+
+async function seedAdmin() {
+  const email = (process.env.ADMIN_EMAIL || "admin@cuantocompro.com").toLowerCase();
   const password = process.env.ADMIN_PASSWORD || "admin1234";
 
-  const yaExiste = USERS.some((u) => u.email === email);
+  const yaExiste = await User.findOne({ email });
   if (yaExiste) return;
 
-  USERS.push({
-    id: "admin-1",
+  await User.create({
     nombre: "Administrador",
     email,
     passwordHash: bcrypt.hashSync(password, 10),
@@ -24,8 +30,9 @@ function seedAdmin() {
   console.log(`👤 Admin sembrado: ${email}`);
 }
 
-function findByEmail(email) {
-  return USERS.find((u) => u.email === email) || null;
+async function findByEmail(email) {
+  if (!email) return null;
+  return User.findOne({ email: String(email).toLowerCase() });
 }
 
 function verifyPassword(user, password) {
@@ -35,35 +42,26 @@ function verifyPassword(user, password) {
 
 function toPublicUser(user) {
   if (!user) return null;
-  const { id, nombre, email, role } = user;
-  return { id, nombre, email, role };
+  const obj = user.toObject ? user.toObject() : user;
+  return { id: obj._id.toString(), nombre: obj.nombre, email: obj.email, role: obj.role };
 }
 
-function create({ nombre, email, password, role = "user" }) {
-  const existente = findByEmail(email);
+async function create({ nombre, email, password, role = "user" }) {
+  const existente = await findByEmail(email);
   if (existente) {
     const error = new Error("Ya existe un usuario con ese email");
     error.status = 409;
     throw error;
   }
 
-  const nuevo = {
-    id: `user-${USERS.length + 1}`,
+  const nuevo = await User.create({
     nombre,
-    email,
+    email: String(email).toLowerCase(),
     passwordHash: bcrypt.hashSync(password, 10),
     role,
-  };
-  USERS.push(nuevo);
+  });
+
   return toPublicUser(nuevo);
 }
 
-seedAdmin();
-
-module.exports = {
-  USERS,
-  findByEmail,
-  verifyPassword,
-  toPublicUser,
-  create,
-};
+module.exports = { User, seedAdmin, findByEmail, verifyPassword, toPublicUser, create };
