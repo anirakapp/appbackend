@@ -1,8 +1,7 @@
 // models/calculosModel.js
-// Acá vive la lógica real de "cuánto comprar". Son valores de referencia,
-// ajustables sin tocar controllers ni el front. porAdulto/porNino están en
-// la unidad indicada, por persona.
+
 const MARGEN_EXTRA = 1.1; // +10% para que "falte lo justo"
+const PORCIONES_POR_PIZZA = 8; // pizza standard: 8 porciones
 
 const MENU_RULES = {
   asado: [
@@ -16,7 +15,14 @@ const MENU_RULES = {
     { label: "Pan de hamburguesa", unidad: "unid", porAdulto: 1, porNino: 1 },
   ],
   pastas: [{ label: "Pastas", unidad: "kg", porAdulto: 0.15, porNino: 0.1 }],
-  pizza: [{ label: "Pizza", unidad: "porciones", porAdulto: 3, porNino: 2 }],
+  pizza: [
+    {
+      label: "Pizza",
+      unidad: "unid",
+      porAdulto: 3 / PORCIONES_POR_PIZZA,
+      porNino: 2 / PORCIONES_POR_PIZZA,
+    },
+  ],
   empanadas: [{ label: "Empanadas", unidad: "unid", porAdulto: 3, porNino: 2 }],
   choripan: [{ label: "Choripán", unidad: "unid", porAdulto: 1, porNino: 0.5 }],
   milanesas: [{ label: "Milanesas", unidad: "unid", porAdulto: 1.5, porNino: 1 }],
