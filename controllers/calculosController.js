@@ -1,4 +1,3 @@
-// controllers/calculosController.js
 const calculosModel = require("../models/calculosModel");
 
 function calcular(req, res) {
@@ -28,7 +27,7 @@ function calcular(req, res) {
     bebidas,
   });
 
-  return res.json({ personas, resumen, consejo });
+  return res.json({ personas, resumen, consejo, menu, bebidas });
 }
 
 module.exports = { calcular };
