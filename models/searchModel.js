@@ -72,9 +72,14 @@ function calcularScoreNegocio(negocio, gruposBuscados, tokensCrudos, opciones) {
 
   gruposBuscados.forEach((grupo) => {
     let coincidioEsteGrupo = false;
+       const categoriaGrupo = normalizar(grupo.categoria);
     const categoriaCoincide =
-      categoriaNegocio && normalizar(grupo.categoria) === categoriaNegocio;
-
+      Boolean(categoriaNegocio) &&
+      Boolean(categoriaGrupo) &&
+      (categoriaNegocio === categoriaGrupo ||
+        categoriaNegocio.includes(categoriaGrupo) ||
+        categoriaGrupo.includes(categoriaNegocio));
+    
     if (categoriaCoincide) {
       score += PUNTOS.categoria;
       coincidioEsteGrupo = true;
