@@ -1,4 +1,5 @@
 const negocioModel = require("../models/negociosModel");
+const productoModel = require("../models/productoModel");
 
 function aplicarPaginacion(res, resultado) {
   res.set("X-Total-Count", String(resultado.total));
@@ -13,7 +14,8 @@ async function listarPublico(req, res, next) {
     const lista = await negocioModel.listarAprobados(
       ciudad,
       lat != null ? Number(lat) : undefined,
-      lng != null ? Number(lng) : undefined
+      lng != null ? Number(lng) : undefined,
+      req.user ? req.user.id : undefined
     );
     const pagina = negocioModel.paginar(lista, req.query);
     return res.json(aplicarPaginacion(res, pagina));
@@ -28,7 +30,12 @@ async function cercanos(req, res, next) {
     if (lat == null || lng == null) {
       return res.status(400).json({ message: "Faltan lat y lng" });
     }
-    const negocios = await negocioModel.listarCercanos(Number(lat), Number(lng));
+    const negocios = await negocioModel.listarCercanos(
+      Number(lat),
+      Number(lng),
+      20,
+      req.user ? req.user.id : undefined
+    );
     return res.json(negocios);
   } catch (error) {
     return next(error);
@@ -58,9 +65,19 @@ async function propios(req, res, next) {
   }
 }
 
+// Agrega la cantidad de productos cargados a cada negocio, para el panel admin.
+async function conCantidadProductos(lista) {
+  return Promise.all(
+    lista.map(async (negocio) => ({
+      ...negocio,
+      cantidadProductos: await productoModel.contarPorNegocio(negocio.id),
+    }))
+  );
+}
+
 async function adminTodos(req, res, next) {
   try {
-    const lista = await negocioModel.listarTodos();
+    const lista = await conCantidadProductos(await negocioModel.listarTodos());
     const pagina = negocioModel.paginar(lista, req.query);
     return res.json(aplicarPaginacion(res, pagina));
   } catch (error) {
@@ -70,7 +87,7 @@ async function adminTodos(req, res, next) {
 
 async function adminPendientes(req, res, next) {
   try {
-    const lista = await negocioModel.listarPendientes();
+    const lista = await conCantidadProductos(await negocioModel.listarPendientes());
     const pagina = negocioModel.paginar(lista, req.query);
     return res.json(aplicarPaginacion(res, pagina));
   } catch (error) {
@@ -118,12 +135,64 @@ async function adminAprobar(req, res, next) {
   }
 }
 
+async function adminBloquear(req, res, next) {
+  try {
+    const negocio = await negocioModel.bloquear(req.params.id);
+    notificar(req, "negocios:actualizado", negocio);
+    return res.json(negocio);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function adminDesbloquear(req, res, next) {
+  try {
+    const negocio = await negocioModel.desbloquear(req.params.id);
+    notificar(req, "negocios:actualizado", negocio);
+    return res.json(negocio);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function adminActivar(req, res, next) {
+  try {
+    const negocio = await negocioModel.activar(req.params.id);
+    notificar(req, "negocios:actualizado", negocio);
+    return res.json(negocio);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function adminDesactivar(req, res, next) {
+  try {
+    const negocio = await negocioModel.desactivar(req.params.id);
+    notificar(req, "negocios:actualizado", negocio);
+    return res.json(negocio);
+  } catch (error) {
+    return next(error);
+  }
+}
+
 function notificar(req, evento, payload) {
   const io = req.app.get("io");
   if (io) io.emit(evento, payload);
 }
 
 module.exports = {
-  listarPublico, cercanos, registrar, propios,
-  adminTodos, adminPendientes, adminCrear, adminActualizar, adminEliminar, adminAprobar,
+  listarPublico,
+  cercanos,
+  registrar,
+  propios,
+  adminTodos,
+  adminPendientes,
+  adminCrear,
+  adminActualizar,
+  adminEliminar,
+  adminAprobar,
+  adminBloquear,
+  adminDesbloquear,
+  adminActivar,
+  adminDesactivar,
 };
