@@ -1,6 +1,7 @@
 const negocioModel = require("../models/negociosModel");
 const productoModel = require("../models/productoModel");
-
+const { CATEGORIAS_ESTANDAR } = require("../lib/keywordDictionary");
+  
 function aplicarPaginacion(res, resultado) {
   res.set("X-Total-Count", String(resultado.total));
   res.set("X-Page", String(resultado.page));
@@ -44,6 +45,9 @@ async function cercanos(req, res, next) {
 
 async function registrar(req, res, next) {
   try {
+    if (!CATEGORIAS_ESTANDAR.includes(req.body.categoria)) {
+      return res.status(400).json({ message: "Categoría inválida." });
+    }
     const negocio = await negocioModel.crear({
       ...req.body,
       ownerId: req.user.id,
@@ -54,7 +58,6 @@ async function registrar(req, res, next) {
   } catch (error) {
     return next(error);
   }
-}
 
 async function propios(req, res, next) {
   try {
