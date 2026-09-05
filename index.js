@@ -9,7 +9,6 @@ const adminRoutes = require("./routes/adminRoutes");
 const negociosRoutes = require("./routes/negociosRoutes");
 const calculosRoutes = require("./routes/calculosRoutes");
 const searchRoutes = require("./routes/searchRoutes");
-
 const app = express();
 
 app.use(cors({
