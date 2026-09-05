@@ -58,6 +58,7 @@ async function registrar(req, res, next) {
   } catch (error) {
     return next(error);
   }
+}
 
 async function propios(req, res, next) {
   try {
