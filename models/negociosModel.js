@@ -92,12 +92,24 @@ async function crear({
   return formatear(negocio.toObject());
 }
 
-async function listarAprobados(ciudad) {
+async function listarAprobados(ciudad, lat, lng) {
   const filtro = { habilitado: true };
   if (ciudad) filtro.ciudad = String(ciudad).toLowerCase();
 
   const negocios = await Negocio.find(filtro).sort({ createdAt: -1 }).lean();
-  return negocios.map(formatear);
+  const formateados = negocios.map(formatear);
+
+  if (lat == null || lng == null) return formateados;
+
+  return formateados
+    .map((n) => ({
+      ...n,
+      distanciaKm:
+        n.lat != null && n.lng != null
+          ? calcularDistanciaKm(lat, lng, n.lat, n.lng)
+          : n.distanciaKm,
+    }))
+    .sort((a, b) => a.distanciaKm - b.distanciaKm);
 }
 
 async function listarTodos() {
