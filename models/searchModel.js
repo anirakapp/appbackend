@@ -64,6 +64,7 @@ function expandirTermino(token) {
 function calcularScoreNegocio(negocio, gruposBuscados, tokensCrudos, opciones) {
   let score = 0;
   let gruposCoincididos = 0;
+  let coincidenciaDirecta = false; // true solo si hubo un match real con lo buscado
 
   const categoriaNegocio = normalizar(negocio.categoria || "");
   const nombreNegocio = normalizar(negocio.nombre || "");
@@ -100,9 +101,37 @@ function calcularScoreNegocio(negocio, gruposBuscados, tokensCrudos, opciones) {
       });
     }
 
-    if (coincidioEsteGrupo) gruposCoincididos += 1;
+    if (coincidioEsteGrupo) {
+      gruposCoincididos += 1;
+      coincidenciaDirecta = true;
+    }
   });
 
+  // Coincidencia directa de tokens crudos (por si el usuario buscó algo que
+  tokensCrudos.forEach((token) => {
+    if (nombreNegocio.includes(token) || categoriaNegocio.includes(token)) {
+      score += PUNTOS.palabraClave;
+      coincidenciaDirecta = true;
+    }
+  });
+
+  // Multi-producto: si el negocio coincide con varios de los grupos
+  if (gruposBuscados.length > 1 && gruposCoincididos > 1) {
+    score += (gruposCoincididos - 1) * PUNTOS.sinonimo;
+  }
+
+  // Importante: estos son puntos de CALIDAD para ordenar entre negocios que
+  if (coincidenciaDirecta) {
+    if (negocio.activo !== false && !negocio.isBlocked) score += PUNTOS.activo;
+    if ((negocio.rating || 0) >= 4) score += PUNTOS.reputacion;
+
+    if (opciones.intencionCercania && negocio.distanciaKm != null) {
+      score += Math.max(0, PUNTOS.cercania - negocio.distanciaKm);
+    }
+  }
+
+  return { score, gruposCoincididos };
+}
   // Coincidencia directa de tokens crudos (por si el usuario buscó algo que
   // no está en el diccionario, ej. el nombre propio de un negocio).
   tokensCrudos.forEach((token) => {
