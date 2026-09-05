@@ -71,30 +71,34 @@ function calcularScoreNegocio(negocio, gruposBuscados, tokensCrudos, opciones) {
 
   gruposBuscados.forEach((grupo) => {
     let coincidioEsteGrupo = false;
+    const categoriaCoincide =
+      categoriaNegocio && normalizar(grupo.categoria) === categoriaNegocio;
 
-    if (categoriaNegocio && normalizar(grupo.categoria) === categoriaNegocio) {
+    if (categoriaCoincide) {
       score += PUNTOS.categoria;
       coincidioEsteGrupo = true;
     }
 
-    grupo.palabras.forEach((palabra) => {
-      const palabraNorm = normalizar(palabra);
+    if (categoriaCoincide) {
+      grupo.palabras.forEach((palabra) => {
+        const palabraNorm = normalizar(palabra);
 
-      if (nombreNegocio.includes(palabraNorm) || categoriaNegocio.includes(palabraNorm)) {
-        score += PUNTOS.palabraClave;
-        coincidioEsteGrupo = true;
-      }
-
-      palabrasClaveNegocio.forEach((clave) => {
-        if (clave === palabraNorm) {
-          score += PUNTOS.productoExacto;
-          coincidioEsteGrupo = true;
-        } else if (coincideAproximado(clave, palabraNorm)) {
-          score += PUNTOS.aproximado;
+        if (nombreNegocio.includes(palabraNorm) || categoriaNegocio.includes(palabraNorm)) {
+          score += PUNTOS.palabraClave;
           coincidioEsteGrupo = true;
         }
+
+        palabrasClaveNegocio.forEach((clave) => {
+          if (clave === palabraNorm) {
+            score += PUNTOS.productoExacto;
+            coincidioEsteGrupo = true;
+          } else if (coincideAproximado(clave, palabraNorm)) {
+            score += PUNTOS.aproximado;
+            coincidioEsteGrupo = true;
+          }
+        });
       });
-    });
+    }
 
     if (coincidioEsteGrupo) gruposCoincididos += 1;
   });
