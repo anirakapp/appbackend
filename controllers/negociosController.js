@@ -9,7 +9,12 @@ function aplicarPaginacion(res, resultado) {
 
 async function listarPublico(req, res, next) {
   try {
-    const lista = await negocioModel.listarAprobados(req.query.ciudad);
+    const { ciudad, lat, lng } = req.query;
+    const lista = await negocioModel.listarAprobados(
+      ciudad,
+      lat != null ? Number(lat) : undefined,
+      lng != null ? Number(lng) : undefined
+    );
     const pagina = negocioModel.paginar(lista, req.query);
     return res.json(aplicarPaginacion(res, pagina));
   } catch (error) {
