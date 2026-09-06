@@ -53,17 +53,22 @@ async function me(req, res, next) {
   }
 }
 
-async function actualizarAvatar(req, res, next) {
+async function actualizarPerfil(req, res, next) {
   try {
-    const { avatarUrl } = req.body;
+    const { nombre, telefono, avatarUrl } = req.body;
+
+    if (nombre !== undefined && !String(nombre).trim()) {
+      return res.status(400).json({ message: "El nombre no puede estar vacío" });
+    }
     if (avatarUrl && !/^https?:\/\/.+/i.test(avatarUrl)) {
       return res.status(400).json({ message: "La URL del avatar no es válida" });
     }
-    const user = await userModel.actualizarAvatar(req.user.id, avatarUrl);
+
+    const user = await userModel.actualizarPerfil(req.user.id, { nombre, telefono, avatarUrl });
     return res.json({ user });
   } catch (error) {
     return next(error);
   }
 }
 
-module.exports = { register, login, me, actualizarAvatar };
+module.exports = { register, login, me, actualizarPerfil };
