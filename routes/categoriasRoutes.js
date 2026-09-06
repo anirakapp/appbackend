@@ -1,12 +1,16 @@
 // routes/categoriasRoutes.js
 const express = require("express");
-const { CATEGORIAS_ESTANDAR } = require("../lib/keywordDictionary");
+const diccionarioService = require("../lib/diccionarioService");
 
 const router = express.Router();
 
-// Pública, de solo lectura: no requiere auth.
-router.get("/", (req, res) => {
-  res.json({ categorias: CATEGORIAS_ESTANDAR });
+router.get("/", async (req, res, next) => {
+  try {
+    const categorias = await diccionarioService.obtenerCategorias();
+    return res.json({ categorias });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 module.exports = router;
