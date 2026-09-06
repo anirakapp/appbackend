@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ["user", "admin"], default: "user" },
     avatarUrl: { type: String, default: null },
+    telefono: { type: String, trim: true, default: null },
   },
   { timestamps: true }
 );
@@ -50,6 +51,7 @@ function toPublicUser(user) {
     email: obj.email,
     role: obj.role,
     avatarUrl: obj.avatarUrl || null,
+    telefono: obj.telefono || null,
   };
 }
 
@@ -71,12 +73,18 @@ async function create({ nombre, email, password, role = "user" }) {
   return toPublicUser(nuevo);
 }
 
-async function actualizarAvatar(userId, avatarUrl) {
-  const user = await User.findByIdAndUpdate(
-    userId,
-    { avatarUrl: avatarUrl || null },
-    { new: true, runValidators: true }
-  );
+// Actualiza solo los campos de perfil que vengan definidos en "cambios"
+// (nombre, telefono, avatarUrl). Los que no se manden quedan como estaban.
+async function actualizarPerfil(userId, cambios) {
+  const permitido = {};
+  if (cambios.nombre !== undefined) permitido.nombre = cambios.nombre;
+  if (cambios.telefono !== undefined) permitido.telefono = cambios.telefono || null;
+  if (cambios.avatarUrl !== undefined) permitido.avatarUrl = cambios.avatarUrl || null;
+
+  const user = await User.findByIdAndUpdate(userId, permitido, {
+    new: true,
+    runValidators: true,
+  });
   if (!user) {
     const error = new Error("Usuario no encontrado");
     error.status = 404;
@@ -92,5 +100,5 @@ module.exports = {
   verifyPassword,
   toPublicUser,
   create,
-  actualizarAvatar,
+  actualizarPerfil,
 };
