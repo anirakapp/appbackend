@@ -11,14 +11,12 @@ function firmarToken(user) {
 
 async function register(req, res, next) {
   const { nombre, email, password } = req.body;
-
   if (!nombre || !email || !password) {
     return res.status(400).json({ message: "Nombre, email y contraseña son obligatorios" });
   }
   if (password.length < 6) {
     return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
   }
-
   try {
     const user = await userModel.create({ nombre, email, password, role: "user" });
     const token = firmarToken(user);
@@ -30,19 +28,15 @@ async function register(req, res, next) {
 
 async function login(req, res, next) {
   const { email, password } = req.body;
-
   if (!email || !password) {
     return res.status(400).json({ message: "Email y contraseña son obligatorios" });
   }
-
   try {
     const user = await userModel.findByEmail(email);
     const esValido = userModel.verifyPassword(user, password);
-
     if (!user || !esValido) {
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
-
     const token = firmarToken(user);
     return res.json({ token, user: userModel.toPublicUser(user) });
   } catch (error) {
@@ -59,4 +53,17 @@ async function me(req, res, next) {
   }
 }
 
-module.exports = { register, login, me };
+async function actualizarAvatar(req, res, next) {
+  try {
+    const { avatarUrl } = req.body;
+    if (avatarUrl && !/^https?:\/\/.+/i.test(avatarUrl)) {
+      return res.status(400).json({ message: "La URL del avatar no es válida" });
+    }
+    const user = await userModel.actualizarAvatar(req.user.id, avatarUrl);
+    return res.json({ user });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+module.exports = { register, login, me, actualizarAvatar };
