@@ -1,7 +1,7 @@
 const negocioModel = require("../models/negociosModel");
 const productoModel = require("../models/productoModel");
 const { CATEGORIAS_ESTANDAR } = require("../lib/keywordDictionary");
-  
+
 function aplicarPaginacion(res, resultado) {
   res.set("X-Total-Count", String(resultado.total));
   res.set("X-Page", String(resultado.page));
@@ -64,6 +64,69 @@ async function propios(req, res, next) {
   try {
     const negocios = await negocioModel.listarPropios(req.user.id);
     return res.json(negocios);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+// Campos que un dueño de negocio puede editar sobre su propio negocio.
+// Deliberadamente NO incluye habilitado/isBlocked/activo/ownerId: esos
+// los controla el admin.
+const CAMPOS_EDITABLES_PROPIO = [
+  "nombre",
+  "categoria",
+  "imagen",
+  "ciudad",
+  "direccion",
+  "descripcion",
+  "barrio",
+  "telefono",
+  "horarios",
+  "palabrasClave",
+  "lat",
+  "lng",
+  "whatsapp",
+];
+
+function filtrarCamposPropio(body) {
+  const cambios = {};
+  for (const campo of CAMPOS_EDITABLES_PROPIO) {
+    if (body[campo] !== undefined) cambios[campo] = body[campo];
+  }
+  return cambios;
+}
+
+// Confirma que el negocio existe y pertenece al usuario autenticado antes
+// de dejarlo editar o eliminar. Devuelve 404 en vez de 403 para no revelar
+// si el id corresponde a un negocio de otra persona.
+async function verificarPropietario(id, userId) {
+  const negocio = await negocioModel.buscarPorId(id);
+  if (!negocio || negocio.ownerId == null || negocio.ownerId.toString() !== userId.toString()) {
+    const error = new Error("Negocio no encontrado");
+    error.status = 404;
+    throw error;
+  }
+  return negocio;
+}
+
+async function propioActualizar(req, res, next) {
+  try {
+    await verificarPropietario(req.params.id, req.user.id);
+    const cambios = filtrarCamposPropio(req.body);
+    const negocio = await negocioModel.actualizar(req.params.id, cambios);
+    notificar(req, "negocios:actualizado", negocio);
+    return res.json(negocio);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function propioEliminar(req, res, next) {
+  try {
+    await verificarPropietario(req.params.id, req.user.id);
+    await negocioModel.eliminar(req.params.id);
+    notificar(req, "negocios:eliminado", { id: req.params.id });
+    return res.json({ id: req.params.id });
   } catch (error) {
     return next(error);
   }
@@ -189,6 +252,8 @@ module.exports = {
   cercanos,
   registrar,
   propios,
+  propioActualizar,
+  propioEliminar,
   adminTodos,
   adminPendientes,
   adminCrear,
