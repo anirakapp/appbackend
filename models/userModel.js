@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ["user", "admin"], default: "user" },
+    avatarUrl: { type: String, default: null },
   },
   { timestamps: true }
 );
@@ -43,7 +44,13 @@ function verifyPassword(user, password) {
 function toPublicUser(user) {
   if (!user) return null;
   const obj = user.toObject ? user.toObject() : user;
-  return { id: obj._id.toString(), nombre: obj.nombre, email: obj.email, role: obj.role };
+  return {
+    id: obj._id.toString(),
+    nombre: obj.nombre,
+    email: obj.email,
+    role: obj.role,
+    avatarUrl: obj.avatarUrl || null,
+  };
 }
 
 async function create({ nombre, email, password, role = "user" }) {
@@ -64,4 +71,26 @@ async function create({ nombre, email, password, role = "user" }) {
   return toPublicUser(nuevo);
 }
 
-module.exports = { User, seedAdmin, findByEmail, verifyPassword, toPublicUser, create };
+async function actualizarAvatar(userId, avatarUrl) {
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { avatarUrl: avatarUrl || null },
+    { new: true, runValidators: true }
+  );
+  if (!user) {
+    const error = new Error("Usuario no encontrado");
+    error.status = 404;
+    throw error;
+  }
+  return toPublicUser(user);
+}
+
+module.exports = {
+  User,
+  seedAdmin,
+  findByEmail,
+  verifyPassword,
+  toPublicUser,
+  create,
+  actualizarAvatar,
+};
