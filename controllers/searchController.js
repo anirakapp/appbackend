@@ -1,10 +1,12 @@
 // backend/controllers/searchController.js
+
 const searchModel = require("../models/searchModel");
 const busquedaModel = require("../models/busquedaModel");
 
 async function buscar(req, res, next) {
   try {
     const { q, ciudad, lat, lng } = req.query;
+
     if (!q || !q.trim()) {
       return res.status(400).json({ message: "Falta el parámetro de búsqueda (q)" });
     }
@@ -23,9 +25,15 @@ async function buscar(req, res, next) {
   }
 }
 
-function sugerencias(req, res) {
-  const { q } = req.query;
-  return res.json(searchModel.sugerir(q || ""));
+
+async function sugerencias(req, res, next) {
+  try {
+    const { q } = req.query;
+    const datos = await searchModel.sugerir(q || "");
+    return res.json(datos);
+  } catch (error) {
+    return next(error);
+  }
 }
 
 async function populares(req, res, next) {
