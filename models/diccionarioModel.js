@@ -1,5 +1,7 @@
 // models/diccionarioModel.js
 const mongoose = require("mongoose");
+const { DICCIONARIO_BASE } = require("../lib/keywordDictionary");
+const { normalizar } = require("../lib/textUtils");
 
 const diccionarioSchema = new mongoose.Schema(
   {
@@ -27,16 +29,43 @@ function slugificar(texto) {
     .trim();
 }
 
+// Busca si ya existe una categoría con ese nombre (estática o ya cargada por
+// el admin), sin importar tildes/mayúsculas, para no permitir duplicados
+// como "carne" vs "carnicería" apuntando a lo mismo.
+async function buscarClaveExistente(categoriaTexto) {
+  const categoriaNorm = normalizar(categoriaTexto);
+
+  const enEstatico = Object.entries(DICCIONARIO_BASE).find(
+    ([, entrada]) => normalizar(entrada.categoria) === categoriaNorm
+  );
+  if (enEstatico) return enEstatico[0];
+
+  const dinamicas = await DiccionarioEntry.find().lean();
+  const enDinamico = dinamicas.find((e) => normalizar(e.categoria) === categoriaNorm);
+  return enDinamico ? enDinamico.clave : null;
+}
+
 async function listarTodos() {
   const entradas = await DiccionarioEntry.find().sort({ categoria: 1 }).lean();
   return entradas.map(formatear);
 }
 
-// Crea una categoría nueva (no pisa nada del diccionario estático).
+// Crea una categoría 100% nueva. Si ya existe una con ese nombre, rechaza
+// y avisa cuál es su clave para que se le agreguen palabras ahí en vez de
+// duplicarla.
 async function crearEntrada({ categoria, palabras, clave }) {
   if (!categoria || !categoria.trim()) {
     const error = new Error("La categoría es obligatoria");
     error.status = 400;
+    throw error;
+  }
+
+  const claveExistente = await buscarClaveExistente(categoria);
+  if (claveExistente) {
+    const error = new Error(
+      `Ya existe la categoría "${categoria}" (clave "${claveExistente}"). Agregale las palabras nuevas desde esa entrada en vez de crear una repetida.`
+    );
+    error.status = 409;
     throw error;
   }
 
@@ -51,8 +80,8 @@ async function crearEntrada({ categoria, palabras, clave }) {
     throw error;
   }
 
-  const existente = await DiccionarioEntry.findOne({ clave: claveFinal }).lean();
-  if (existente) {
+  const existentePorClave = await DiccionarioEntry.findOne({ clave: claveFinal }).lean();
+  if (existentePorClave) {
     const error = new Error(`Ya existe una entrada con la clave "${claveFinal}"`);
     error.status = 409;
     throw error;
@@ -87,17 +116,36 @@ async function agregarPalabras(clave, palabrasNuevas, categoriaFallback) {
   ).lean();
 
   if (!entrada) {
-    if (!categoriaFallback) {
+    const categoria = categoriaFallback || DICCIONARIO_BASE[claveFinal]?.categoria;
+    if (!categoria) {
       const error = new Error("No encontramos esa entrada; para crearla mandá también la categoría");
       error.status = 404;
       throw error;
     }
     entrada = (
-      await DiccionarioEntry.create({ clave: claveFinal, categoria: categoriaFallback, palabras: limpias })
+      await DiccionarioEntry.create({ clave: claveFinal, categoria, palabras: limpias })
     ).toObject();
   }
 
   return formatear(entrada);
 }
 
-module.exports = { DiccionarioEntry, listarTodos, crearEntrada, agregarPalabras, slugificar };
+async function eliminarEntrada(clave) {
+  const claveFinal = slugificar(clave);
+  const eliminada = await DiccionarioEntry.findOneAndDelete({ clave: claveFinal }).lean();
+  if (!eliminada) {
+    const error = new Error("No encontramos esa entrada para eliminar");
+    error.status = 404;
+    throw error;
+  }
+  return formatear(eliminada);
+}
+
+module.exports = {
+  DiccionarioEntry,
+  listarTodos,
+  crearEntrada,
+  agregarPalabras,
+  eliminarEntrada,
+  slugificar,
+};
