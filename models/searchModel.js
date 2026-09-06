@@ -4,7 +4,7 @@ const negocioModel = require("./negociosModel");
 const busquedaModel = require("./busquedaModel");
 const { PALABRAS_INTENCION_COMPRA, PALABRAS_CERCANIA } = require("../lib/keywordDictionary");
 const { obtenerDiccionario } = require("../lib/diccionarioService");
-const { normalizar, tokenizar, coincideAproximado } = require("../lib/textUtils");
+const { normalizar, tokenizar, coincideAproximado, coincideEnFrase, coincidePrefijoEnFrase } = require("../lib/textUtils");
 
 const PUNTOS = {
   productoExacto: 40,
@@ -16,6 +16,41 @@ const PUNTOS = {
   reputacion: 10,
   cercania: 10,
 };
+
+const STOPWORDS = new Set([
+  "para",
+  "de",
+  "del",
+  "la",
+  "el",
+  "los",
+  "las",
+  "un",
+  "una",
+  "unos",
+  "unas",
+  "que",
+  "y",
+  "o",
+  "en",
+  "con",
+  "por",
+  "a",
+  "al",
+  "se",
+  "mi",
+  "tu",
+  "su",
+]);
+
+// Largo mínimo para que un token crudo participe del fallback de
+// tokensCrudos en calcularScoreNegocio. Tokens muy cortos generan
+// coincidencias de substring poco confiables.
+const LARGO_MINIMO_TOKEN_CRUDO = 3;
+
+function esTokenUtil(token) {
+  return token.length > 2 && !STOPWORDS.has(token);
+}
 
 function detectarIntencion(textoNormalizado) {
   const intencionCompra = PALABRAS_INTENCION_COMPRA.some((frase) =>
@@ -46,9 +81,7 @@ async function expandirTermino(token) {
   Object.entries(diccionario).forEach(([clave, entrada]) => {
     const coincide = entrada.palabras.some((palabra) => {
       const palabraNorm = normalizar(palabra);
-      if (palabraNorm === token) return true;
-      if (palabraNorm.includes(token) || token.includes(palabraNorm)) return true;
-      return coincideAproximado(token, palabraNorm);
+      return coincideEnFrase(token, palabraNorm);
     });
     if (coincide) {
       grupos.push({ clave, categoria: entrada.categoria, palabras: entrada.palabras });
@@ -109,12 +142,14 @@ function calcularScoreNegocio(negocio, gruposBuscados, tokensCrudos, opciones) {
     }
   });
 
-  tokensCrudos.forEach((token) => {
-    if (nombreNegocio.includes(token) || categoriaNegocio.includes(token)) {
-      score += PUNTOS.palabraClave;
-      coincidenciaDirecta = true;
-    }
-  });
+  tokensCrudos
+    .filter((token) => token.length >= LARGO_MINIMO_TOKEN_CRUDO)
+    .forEach((token) => {
+      if (nombreNegocio.includes(token) || categoriaNegocio.includes(token)) {
+        score += PUNTOS.palabraClave;
+        coincidenciaDirecta = true;
+      }
+    });
 
   if (gruposBuscados.length > 1 && gruposCoincididos > 1) {
     score += (gruposCoincididos - 1) * PUNTOS.sinonimo;
@@ -137,7 +172,11 @@ async function buscar({ q, ciudad, lat, lng, userId }) {
   if (!textoNormalizado) return { resultados: [], sugerenciaVacia: true };
 
   const { intencionCercania, textoLimpio } = detectarIntencion(textoNormalizado);
-  const tokens = tokenizar(textoLimpio);
+
+  // Se descartan conectores (stopwords) y tokens demasiado cortos antes de
+  // usarlos para expandir términos o para el fallback de matching crudo:
+  // son la fuente principal de falsos positivos (ver comentario en STOPWORDS).
+  const tokens = tokenizar(textoLimpio).filter(esTokenUtil);
 
   const gruposPorToken = await Promise.all(tokens.map(expandirTermino));
   const gruposBuscados = gruposPorToken.flat();
@@ -165,7 +204,7 @@ async function buscar({ q, ciudad, lat, lng, userId }) {
 // Ahora es async por el mismo motivo que expandirTermino.
 async function sugerir(prefijoCrudo) {
   const prefijo = normalizar(prefijoCrudo);
-  if (!prefijo) return [];
+  if (!prefijo || STOPWORDS.has(prefijo)) return [];
 
   const diccionario = await obtenerDiccionario();
   const vistos = new Set();
@@ -174,9 +213,7 @@ async function sugerir(prefijoCrudo) {
   Object.values(diccionario).forEach((entrada) => {
     entrada.palabras.forEach((palabra) => {
       const palabraNorm = normalizar(palabra);
-      const matchea =
-        palabraNorm.startsWith(prefijo) ||
-        (prefijo.length >= 3 && coincideAproximado(prefijo, palabraNorm));
+      const matchea = coincidePrefijoEnFrase(prefijo, palabraNorm);
 
       if (matchea && !vistos.has(palabra)) {
         vistos.add(palabra);
