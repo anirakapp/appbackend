@@ -10,6 +10,8 @@ const negociosRoutes = require("./routes/negociosRoutes");
 const calculosRoutes = require("./routes/calculosRoutes");
 const searchRoutes = require("./routes/searchRoutes");
 const categoriasRoutes = require("./routes/categoriasRoutes")
+const diccionarioRoutes = require("./routes/diccionarioRoutes");
+// ...
 const app = express();
 
 app.use(cors({
@@ -37,6 +39,7 @@ app.use("/api/negocios", negociosRoutes);
 app.use("/api/calculo", calculosRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/categorias",categoriasRoutes );
+app.use("/api/admin/diccionario", diccionarioRoutes);
 
 app.use((req, res) => res.status(404).json({ message: "Ruta no encontrada" }));
 app.use((err, req, res, next) => {
