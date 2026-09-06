@@ -2,14 +2,10 @@
 
 const negocioModel = require("./negociosModel");
 const busquedaModel = require("./busquedaModel");
-const {
-  DICCIONARIO,
-  PALABRAS_INTENCION_COMPRA,
-  PALABRAS_CERCANIA,
-} = require("../lib/keywordDictionary");
+const { PALABRAS_INTENCION_COMPRA, PALABRAS_CERCANIA } = require("../lib/keywordDictionary");
+const { obtenerDiccionario } = require("../lib/diccionarioService");
 const { normalizar, tokenizar, coincideAproximado } = require("../lib/textUtils");
 
-// Puntajes orientativos pedidos, ya aplicados en un sistema consistente.
 const PUNTOS = {
   productoExacto: 40,
   categoria: 30,
@@ -41,12 +37,13 @@ function detectarIntencion(textoNormalizado) {
   return { intencionCompra, intencionCercania, textoLimpio: limpio };
 }
 
-// Expande un token de búsqueda a la(s) entrada(s) del diccionario que
-// matchean (exacto, contiene, o aproximado por errores de tipeo).
-function expandirTermino(token) {
+// Ahora es async: el diccionario puede incluir categorías/palabras cargadas
+// por el admin desde el dashboard, además de las fijas del código.
+async function expandirTermino(token) {
+  const diccionario = await obtenerDiccionario();
   const grupos = [];
 
-  Object.entries(DICCIONARIO).forEach(([clave, entrada]) => {
+  Object.entries(diccionario).forEach(([clave, entrada]) => {
     const coincide = entrada.palabras.some((palabra) => {
       const palabraNorm = normalizar(palabra);
       if (palabraNorm === token) return true;
@@ -64,7 +61,7 @@ function expandirTermino(token) {
 function calcularScoreNegocio(negocio, gruposBuscados, tokensCrudos, opciones) {
   let score = 0;
   let gruposCoincididos = 0;
-  let coincidenciaDirecta = false; // true solo si hubo un match real con lo buscado
+  let coincidenciaDirecta = false;
 
   const categoriaNegocio = normalizar(negocio.categoria || "");
   const nombreNegocio = normalizar(negocio.nombre || "");
@@ -72,23 +69,19 @@ function calcularScoreNegocio(negocio, gruposBuscados, tokensCrudos, opciones) {
 
   gruposBuscados.forEach((grupo) => {
     let coincidioEsteGrupo = false;
-       const categoriaGrupo = normalizar(grupo.categoria);
+    const categoriaGrupo = normalizar(grupo.categoria);
     const categoriaCoincide =
       Boolean(categoriaNegocio) &&
       Boolean(categoriaGrupo) &&
       (categoriaNegocio === categoriaGrupo ||
         categoriaNegocio.includes(categoriaGrupo) ||
         categoriaGrupo.includes(categoriaNegocio));
-    
+
     if (categoriaCoincide) {
       score += PUNTOS.categoria;
       coincidioEsteGrupo = true;
     }
 
-    // Solo sumamos puntos por palabra clave / producto exacto si el negocio
-    // realmente pertenece a la categoría de ese grupo. Si no, un almacén que
-    // cargó "carne" como palabra clave propia (aunque su categoría sea
-    // "almacén") ya no cuenta como resultado al buscar "carnicería".
     if (categoriaCoincide) {
       grupo.palabras.forEach((palabra) => {
         const palabraNorm = normalizar(palabra);
@@ -116,8 +109,6 @@ function calcularScoreNegocio(negocio, gruposBuscados, tokensCrudos, opciones) {
     }
   });
 
-  // Coincidencia directa de tokens crudos (por si el usuario buscó algo que
-  // no está en el diccionario, ej. el nombre propio de un negocio).
   tokensCrudos.forEach((token) => {
     if (nombreNegocio.includes(token) || categoriaNegocio.includes(token)) {
       score += PUNTOS.palabraClave;
@@ -125,15 +116,10 @@ function calcularScoreNegocio(negocio, gruposBuscados, tokensCrudos, opciones) {
     }
   });
 
-  // Multi-producto: si el negocio coincide con varios de los grupos
-  // buscados ("carne y pan"), le damos un bonus por cubrir más de uno.
   if (gruposBuscados.length > 1 && gruposCoincididos > 1) {
     score += (gruposCoincididos - 1) * PUNTOS.sinonimo;
   }
 
-  // Importante: estos son puntos de CALIDAD para ordenar entre negocios que
-  // YA matchearon algo — nunca deben ser la razón por la que un negocio sin
-  // ninguna relación con la búsqueda aparezca en los resultados.
   if (coincidenciaDirecta) {
     if (negocio.activo !== false && !negocio.isBlocked) score += PUNTOS.activo;
     if ((negocio.rating || 0) >= 4) score += PUNTOS.reputacion;
@@ -153,7 +139,8 @@ async function buscar({ q, ciudad, lat, lng, userId }) {
   const { intencionCercania, textoLimpio } = detectarIntencion(textoNormalizado);
   const tokens = tokenizar(textoLimpio);
 
-  const gruposBuscados = tokens.map(expandirTermino).flat();
+  const gruposPorToken = await Promise.all(tokens.map(expandirTermino));
+  const gruposBuscados = gruposPorToken.flat();
 
   const negocios =
     lat != null && lng != null
@@ -162,9 +149,7 @@ async function buscar({ q, ciudad, lat, lng, userId }) {
 
   const conScore = negocios
     .map((negocio) => {
-      const { score } = calcularScoreNegocio(negocio, gruposBuscados, tokens, {
-        intencionCercania,
-      });
+      const { score } = calcularScoreNegocio(negocio, gruposBuscados, tokens, { intencionCercania });
       return { negocio, score };
     })
     .filter((item) => item.score > 0)
@@ -177,16 +162,16 @@ async function buscar({ q, ciudad, lat, lng, userId }) {
   return { resultados, sugerenciaVacia: resultados.length === 0 };
 }
 
-// Sugerencias de autocompletado a partir del diccionario (no inventa
-// negocios, solo términos/categorías conocidas).
-function sugerir(prefijoCrudo) {
+// Ahora es async por el mismo motivo que expandirTermino.
+async function sugerir(prefijoCrudo) {
   const prefijo = normalizar(prefijoCrudo);
   if (!prefijo) return [];
 
+  const diccionario = await obtenerDiccionario();
   const vistos = new Set();
   const sugerencias = [];
 
-  Object.values(DICCIONARIO).forEach((entrada) => {
+  Object.values(diccionario).forEach((entrada) => {
     entrada.palabras.forEach((palabra) => {
       const palabraNorm = normalizar(palabra);
       const matchea =
